@@ -1,5 +1,6 @@
 
-![alt text](http://url/to/img.png)
+![screenshot](WAV_foramt.png)
+
 
 The canonical WAVE format starts with the RIFF header:
 
