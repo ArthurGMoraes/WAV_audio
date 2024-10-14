@@ -1,5 +1,5 @@
 
-![screenshot](WAV_foramt.png)
+![screenshot](WAV_format.png)
 
 
 The canonical WAVE format starts with the RIFF header:
