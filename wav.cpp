@@ -5,7 +5,7 @@
 
 using namespace std;
 
-typedef pair<double, int> pFrequencyDuration; // (hertz , seconds);
+typedef pair<vector<double>, int> pFrequencyDuration; // (hertz , seconds);
 
 // HEADER
 const string chunkID = "RIFF";
@@ -51,31 +51,50 @@ void writeChunks(ofstream &file){
 
 const int maxAmplitude = 32760; // aprox max value for 16bits
 
-void writeData(ofstream &file, const double frequency, const int duration){
+void writeData(ofstream &file, const vector<double> frequency, const int duration){
     double amplitude;
     double value;
     double channel;
 
+    int numberOfNotes = frequency.size();
+
     for (int i = 0 ; i < sampleRate * duration; i++){
         amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * duration )); // fade the note
         double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * frequency * time);
+        value = 0.0;
+        for (int j = 0; j < numberOfNotes; j++) {
+            value += sin(2.0 * 3.14 * frequency[j] * time);
+        }
+        value = value / numberOfNotes;
         channel = amplitude * value;
         toByte(file, channel, 2);
     }
 }
 
-void selectNotes(ofstream &file){
+void twinleTwinkle(ofstream &file){
     vector<pFrequencyDuration> notes;
 
     // twinkle twinkle little star
-    notes.push_back({261.63 , 1});
-    notes.push_back({261.63 , 1});
-    notes.push_back({392.00 , 1});
-    notes.push_back({392.00 , 1});
-    notes.push_back({440.00 , 1});
-    notes.push_back({440.00 , 1});
-    notes.push_back({392.00 , 2});
+    notes.push_back({{261.63} , 1});
+    notes.push_back({{261.63} , 1});
+    notes.push_back({{392.00} , 1});
+    notes.push_back({{392.00} , 1});
+    notes.push_back({{440.00} , 1});
+    notes.push_back({{440.00} , 1});
+    notes.push_back({{392.00} , 2});
+
+    for (int i = 0; i < notes.size(); i++){
+        writeData(file, notes[i].first, notes[i].second);
+    }
+}
+
+void chords(ofstream &file){
+    vector<pFrequencyDuration> notes;
+
+    // D, G, E
+    notes.push_back({{293.66, 369.99, 440.00} , 1});
+    notes.push_back({{392.00, 493.88, 587.33} , 1});
+    notes.push_back({{329.63, 415.30, 493.88} , 1});
 
     for (int i = 0; i < notes.size(); i++){
         writeData(file, notes[i].first, notes[i].second);
@@ -84,14 +103,14 @@ void selectNotes(ofstream &file){
 
 int main(){
     ofstream wav;
-    wav.open("sound.wav", ios::binary);
+    wav.open("twinleTwinkle.wav", ios::binary);
 
     if(wav.is_open()){
         writeChunks(wav);
 
         int start = wav.tellp();        // audio start
 
-        selectNotes(wav);
+        twinleTwinkle(wav);
 
         int end = wav.tellp();          // eof
 
@@ -103,4 +122,23 @@ int main(){
     }
 
     wav.close();
+
+    wav.open("chords.wav", ios::binary);
+    if(wav.is_open()){
+        writeChunks(wav);
+
+        int start = wav.tellp();        // audio start
+
+        chords(wav);
+
+        int end = wav.tellp();          // eof
+
+        wav.seekp(start - 4);           // going back to subChunk2Size
+        toByte(wav, end - start, 4);    // writing the value
+
+        wav.seekp(4, ios::beg);         // going back to chunkSize
+        toByte(wav, end - 8, 4);        // writing the value
+    }
+    wav.close();
+
 }
