@@ -5,7 +5,7 @@
 
 using namespace std;
 
-typedef pair<double, int> pFrequencyDuration; // (heartz , seconds);
+typedef pair<double, int> pFrequencyDuration; // (hertz , seconds);
 
 // HEADER
 const string chunkID = "RIFF";
