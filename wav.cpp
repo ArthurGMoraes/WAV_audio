@@ -5,8 +5,32 @@
 
 using namespace std;
 
-typedef pair<vector<double>, int> pFrequencyDuration; // (hertz , seconds);
+//----------------------------------------------------------------------------------------------//
+//                                      code setup                                              //
+//----------------------------------------------------------------------------------------------//
+typedef pair<vector<double>, double> pFrequencyDuration; // (hertz , seconds);
 
+struct ADSR {
+    double attackTime;   // in seconds
+    double decayTime;    // in seconds
+    double sustainLevel; // between 0.0 and 1.0
+    double releaseTime;  // in seconds
+};
+
+ADSR guitarEnvelope = {
+    0.01,  
+    5.0,  
+    0.0,    
+    4   
+};
+
+const int maxAmplitude = 32760; // aprox max value for 16bits
+
+double makeSound(const int, const pFrequencyDuration, ADSR);
+
+//----------------------------------------------------------------------------------------------//
+//                                      .WAV structure                                          //
+//----------------------------------------------------------------------------------------------//                                    
 // HEADER
 const string chunkID = "RIFF";
 const string chunkSize = "----"; // 4 + (8 + SubChunk1Size) + (8 + SubChunk2Size)
@@ -26,6 +50,9 @@ const int bitsPerSample = 16;
 const string subChunk2ID = "data";
 const string subChunk2Size = "----"; // numSamples * numChannels * bitsPerSample/8
 
+//----------------------------------------------------------------------------------------------//
+//                                         writng data                                          //
+//----------------------------------------------------------------------------------------------//
 void toByte(ofstream &file, int value, int size){
     file.write(reinterpret_cast<const char*>(&value), size);
 }
@@ -49,57 +76,125 @@ void writeChunks(ofstream &file){
         file << subChunk2Size;
 }
 
-const int maxAmplitude = 32760; // aprox max value for 16bits
-
-void writeData(ofstream &file, const vector<double> frequency, const int duration){
-    double amplitude;
-    double value;
+void writeData(ofstream &file, const pFrequencyDuration notes, ADSR envelope){
     double channel;
 
-    int numberOfNotes = frequency.size();
-
-    for (int i = 0 ; i < sampleRate * duration; i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * duration )); // fade the note
-        double time = (double)i/sampleRate;
-        value = 0.0;
-        for (int j = 0; j < numberOfNotes; j++) {
-            value += sin(2.0 * 3.14 * frequency[j] * time);
-        }
-        value = value / numberOfNotes;
-        channel = amplitude * value;
+    for (int i = 0 ; i < sampleRate * notes.second; i++){
+        channel = makeSound(i, notes, envelope);
         toByte(file, channel, 2);
     }
 }
 
-void twinleTwinkle(ofstream &file){
+//----------------------------------------------------------------------------------------------//
+//                                       creating sounds                                        //
+//----------------------------------------------------------------------------------------------//
+
+double applyHardClipping(double sample) {
+    const double threshold = 0.08; //  0 < threshold  <= 1
+
+    // Soft clipping
+    if (sample >= 0) {
+        sample = fmin(sample, threshold);
+    } else {
+        sample = fmax(sample, -threshold);
+    }
+
+    return sample /= threshold;
+}
+
+double applyGain(double sample){
+    double gain = 6.00;
+    sample *= gain;
+    return sample;
+}
+
+double applyADSR(double time, double noteDuration, ADSR envelope) {
+    double amplitude = 0.0;
+
+    if (time < envelope.attackTime) {
+        // Attack phase
+        amplitude = (time / envelope.attackTime);
+    } else if (time < envelope.attackTime + envelope.decayTime) {
+        // Decay phase
+        double decayProgress = (time - envelope.attackTime) / envelope.decayTime;
+        amplitude = 1.0 - (1.0 - envelope.sustainLevel) * decayProgress;
+    } else if (time < noteDuration) {
+        // Sustain phase
+        amplitude = envelope.sustainLevel;
+    } else if (time < noteDuration + envelope.releaseTime) {
+        // Release phase
+        double releaseProgress = (time - noteDuration) / envelope.releaseTime;
+        amplitude = envelope.sustainLevel * (1.0 - releaseProgress);
+    } else {
+        // After release
+        amplitude = 0.0;
+    }
+
+    return amplitude;
+}
+
+double makeSound(const int i, const pFrequencyDuration notes, ADSR envelope){
+    double amplitude, value, fundamental, harmonic1, harmonic2, delayedTime;
+    double duration = notes.second;
+    vector<double> frequency = notes.first;
+    int numberOfNotes = notes.first.size();
+    vector<double> startTimes(numberOfNotes);
+    for (int j = 0; j < numberOfNotes; j++) {
+        startTimes[j] = j * 0.05; // Each note starts later by strumDelay
+    }
+    
+    double time = (double)i/sampleRate;
+    amplitude = applyADSR(time, duration, envelope) * (maxAmplitude); // fade the note
+    
+    value = 0.0;
+    for (int i = 0; i < numberOfNotes; i++) {
+        if (time >= startTimes[i]) {
+            delayedTime = time - startTimes[i];
+            fundamental = sin(2.0 * 3.14 * frequency[i] * delayedTime);
+            harmonic1 = 0.5 * sin(2.0 * 3.14 * 2 * frequency[i] * delayedTime);
+            harmonic2 = 0.25 * sin(2.0 * 3.14 * 3 * frequency[i] * delayedTime);
+            value += fundamental + harmonic1 + harmonic2;
+        }
+        
+    }
+    value = value / (numberOfNotes*3);
+    value = applyGain(value);
+    value = applyHardClipping(value);
+    value = amplitude * value;
+    return value;
+}
+
+void twinleTwinkle(ofstream &file, ADSR envelope){
     vector<pFrequencyDuration> notes;
 
     // twinkle twinkle little star
-    notes.push_back({{261.63} , 1});
-    notes.push_back({{261.63} , 1});
-    notes.push_back({{392.00} , 1});
-    notes.push_back({{392.00} , 1});
-    notes.push_back({{440.00} , 1});
-    notes.push_back({{440.00} , 1});
-    notes.push_back({{392.00} , 2});
+    notes.push_back({{261.63} , 1.0});
+    notes.push_back({{261.63} , 1.0});
+    notes.push_back({{392.00} , 1.0});
+    notes.push_back({{392.00} , 1.0});
+    notes.push_back({{440.00} , 1.0});
+    notes.push_back({{440.00} , 1.0});
+    notes.push_back({{392.00} , 2.0});
 
     for (int i = 0; i < notes.size(); i++){
-        writeData(file, notes[i].first, notes[i].second);
+        writeData(file, notes[i], envelope);
     }
 }
 
-void chords(ofstream &file){
+void chords(ofstream &file, ADSR envelope){
     vector<pFrequencyDuration> notes;
 
     // D, G, E
-    notes.push_back({{293.66, 369.99, 440.00} , 1});
-    notes.push_back({{392.00, 493.88, 587.33} , 1});
-    notes.push_back({{329.63, 415.30, 493.88} , 1});
+    notes.push_back({{147.00, 220.00, 294.00 , 370.00} , 6.0});
+    notes.push_back({{98.00, 123.00, 147.00, 196.00, 294.00, 392.00} , 3.0});
+    notes.push_back({{82.00, 123.00 , 165.00, 208.00} , 3.0});
 
     for (int i = 0; i < notes.size(); i++){
-        writeData(file, notes[i].first, notes[i].second);
+        writeData(file, notes[i], envelope);
     }
 }
+
+//----------------------------------------------------------------------------------------------//
 
 int main(){
     ofstream wav;
@@ -110,7 +205,7 @@ int main(){
 
         int start = wav.tellp();        // audio start
 
-        twinleTwinkle(wav);
+        twinleTwinkle(wav, guitarEnvelope);
 
         int end = wav.tellp();          // eof
 
@@ -129,7 +224,7 @@ int main(){
 
         int start = wav.tellp();        // audio start
 
-        chords(wav);
+        chords(wav, guitarEnvelope);
 
         int end = wav.tellp();          // eof
 
