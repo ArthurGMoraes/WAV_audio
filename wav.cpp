@@ -1,8 +1,11 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <vector>
 
 using namespace std;
+
+typedef pair<double, int> pFrequencyDuration; // (heartz , seconds);
 
 // HEADER
 const string chunkID = "RIFF";
@@ -27,65 +30,6 @@ void toByte(ofstream &file, int value, int size){
     file.write(reinterpret_cast<const char*>(&value), size);
 }
 
-const int maxAmplitude = 32760; // aprox max value for 16bits
-void writeData(ofstream &file, const int duration){
-    double amplitude;
-    double value;
-    double channel;
-
-    // twinkle twinkle little star
-    for (int i = 0 ; i < sampleRate * (duration / 8); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 8))); // fade the note
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 261.63 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-    for (int i = 0 ; i < sampleRate * (duration / 8); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 8)));
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 261.63 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-    for (int i = 0 ; i < sampleRate * (duration / 8); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 8)));
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 392.00 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-    for (int i = 0 ; i < sampleRate * (duration / 8); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 8)));
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 392.00 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-    for (int i = 0 ; i < sampleRate * (duration / 8); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 8)));
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 440.00 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-    for (int i = 0 ; i < sampleRate * (duration / 8); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 8)));
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 440.00 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-    for (int i = 0 ; i < sampleRate * (duration / 4); i++){
-        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * (duration / 4)));
-        double time = (double)i/sampleRate;
-        value = sin(2 * 3.14 * 392.00 * time);
-        channel = amplitude * value;
-        toByte(file, channel, 2);
-    }
-}
-
-
 // writing the basic structure of the WAV file
 void writeChunks(ofstream &file){
         file << chunkID;
@@ -105,6 +49,39 @@ void writeChunks(ofstream &file){
         file << subChunk2Size;
 }
 
+const int maxAmplitude = 32760; // aprox max value for 16bits
+
+void writeData(ofstream &file, const double frequency, const int duration){
+    double amplitude;
+    double value;
+    double channel;
+
+    for (int i = 0 ; i < sampleRate * duration; i++){
+        amplitude = maxAmplitude * (1.0 - (double)i / (sampleRate * duration )); // fade the note
+        double time = (double)i/sampleRate;
+        value = sin(2 * 3.14 * frequency * time);
+        channel = amplitude * value;
+        toByte(file, channel, 2);
+    }
+}
+
+void selectNotes(ofstream &file){
+    vector<pFrequencyDuration> notes;
+
+    // twinkle twinkle little star
+    notes.push_back({261.63 , 1});
+    notes.push_back({261.63 , 1});
+    notes.push_back({392.00 , 1});
+    notes.push_back({392.00 , 1});
+    notes.push_back({440.00 , 1});
+    notes.push_back({440.00 , 1});
+    notes.push_back({392.00 , 2});
+
+    for (int i = 0; i < notes.size(); i++){
+        writeData(file, notes[i].first, notes[i].second);
+    }
+}
+
 int main(){
     ofstream wav;
     wav.open("sound.wav", ios::binary);
@@ -114,7 +91,7 @@ int main(){
 
         int start = wav.tellp();        // audio start
 
-        writeData(wav, 8);
+        selectNotes(wav);
 
         int end = wav.tellp();          // eof
 
